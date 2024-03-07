@@ -9,6 +9,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -160,6 +161,7 @@ public class BankService {
         return userRepositiory.save(user).toString();
     }
 
+    @Scheduled(cron = "${cronjob}")
     public String accessAccountData() throws JsonMappingException, JsonProcessingException{
         User user = getUserEntity();
         String url = settingRepository.findByName(BankingLink.ACCESS_TRANSACTION.value())+user.getAccount().getAccounts().get(0)+"/transactions/";
