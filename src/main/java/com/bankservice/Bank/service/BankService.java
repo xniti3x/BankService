@@ -9,8 +9,10 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
@@ -26,7 +28,6 @@ import com.bankservice.Bank.repository.TransactionRepository;
 import com.bankservice.Bank.repository.UserRepositiory;
 import com.bankservice.Bank.util.BankingLink;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
@@ -44,7 +45,7 @@ public class BankService {
 
     public String getAccessToken(){
         User user = getUserEntity();
-        String url = settingRepository.findByName(BankingLink.ACESS_TOKEN.value());
+        String url = settingRepository.findByName(BankingLink.ACESS_TOKEN.toString());
         
         ObjectMapper mapper = new ObjectMapper();
         String json = mapper.createObjectNode()
@@ -63,10 +64,33 @@ public class BankService {
         return "token erfolgreich gespeichert. <a href='"+getBaseUrl()+"/choosebank'>weiter</a>";
     }
 
+    public void getAccessTokenWithRefresh(){
+        User user = getUserEntity();
+        String url = settingRepository.findByName(BankingLink.REFRESH_TOKEN.toString());
+        Token oldToken = user.getToken();
+        
+        ObjectMapper mapper = new ObjectMapper();
+        String json = mapper.createObjectNode()
+                        .put("refresh",oldToken.getRefresh()).toString();
+        
+                        restTemplate = new RestTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<String> request =  new HttpEntity<String>(json, headers);
+
+        Token newToken = restTemplate.postForObject(url, request, Token.class);
+        oldToken.setAccess(newToken.getAccess());
+        oldToken.setAccess_expires(newToken.getAccess_expires());
+        newToken=oldToken;
+
+        user.setToken(newToken);
+        userRepositiory.save(user);
+    }
+
     public String chooseBank(){
         User user = getUserEntity();
         Token token = user.getToken();
-        String url = settingRepository.findByName(BankingLink.CHOSE_BANK.value());
+        String url = settingRepository.findByName(BankingLink.CHOSE_BANK.toString());
         restTemplate = new RestTemplate();
 
         HttpHeaders headers = new HttpHeaders();
@@ -90,7 +114,7 @@ public class BankService {
         User user = getUserEntity();
         Token token = user.getToken();
         Institution institution = user.getInstitution();
-        String url = settingRepository.findByName(BankingLink.CREATE_AGREEMENT.value());
+        String url = settingRepository.findByName(BankingLink.CREATE_AGREEMENT.toString());
         restTemplate = new RestTemplate();
         
         HttpHeaders headers = new HttpHeaders();
@@ -107,7 +131,6 @@ public class BankService {
                         //.put("access_scope", Arrays.asList("transaction").toString())
                         .toString();
         
-        System.out.println(body);
         HttpEntity<String> request =  new HttpEntity<String>(body, headers);
         Agreement agreement = restTemplate.postForObject(url, request, Agreement.class);
        
@@ -117,7 +140,7 @@ public class BankService {
 
     public String buildLink(){
         User user = getUserEntity();
-        String url = settingRepository.findByName(BankingLink.BUILD_LINK.value());
+        String url = settingRepository.findByName(BankingLink.BUILD_LINK.toString());
 
         restTemplate = new RestTemplate();
         
@@ -146,8 +169,7 @@ public class BankService {
     public String listAcc(){
         
         User user = getUserEntity();
-        String url = settingRepository.findByName(BankingLink.LIST_ACCOUNT.value()) + user.getRequisition().getId();
-        System.out.println(url);
+        String url = settingRepository.findByName(BankingLink.LIST_ACCOUNT.toString()) + user.getRequisition().getId();
         restTemplate = new RestTemplate();
         
         HttpHeaders headers = new HttpHeaders();
@@ -162,9 +184,9 @@ public class BankService {
     }
 
     @Scheduled(cron = "${cronjob}")
-    public String accessAccountData() throws JsonMappingException, JsonProcessingException{
+    public void accessAccountData() {
         User user = getUserEntity();
-        String url = settingRepository.findByName(BankingLink.ACCESS_TRANSACTION.value())+user.getAccount().getAccounts().get(0)+"/transactions/";
+        String url = settingRepository.findByName(BankingLink.ACCESS_TRANSACTION.toString())+user.getAccount().getAccounts().get(0)+"/transactions/";
         
         restTemplate = new RestTemplate();
         
@@ -174,38 +196,46 @@ public class BankService {
         headers.set("Authorization", "Bearer "+user.getToken().getAccess());
         
         HttpEntity<String> request =  new HttpEntity<String>(headers);
-        String transactions= restTemplate.exchange(url, HttpMethod.GET, request, String.class).getBody();
-        System.out.println(transactions);
-        ObjectMapper mapper = new ObjectMapper();
-        TransactionDto dto = mapper.readValue(transactions,TransactionDto.class);
-        ArrayList<Booked> bookedTransactions = dto.getTransactions().getBooked();
+        try {
+            ResponseEntity<String> transactions= restTemplate.exchange(url, HttpMethod.GET, request, String.class);
+            
+            ObjectMapper mapper = new ObjectMapper();
+            TransactionDto dto = mapper.readValue(transactions.getBody(),TransactionDto.class);
+            ArrayList<Booked> bookedTransactions = dto.getTransactions().getBooked();
         
-        Transaction last = transactionRepository.findLast().orElse(new Transaction());
-        for (Booked tr : bookedTransactions) {
-            if(tr.getTransactionId().equals(last.getTransactionId())) break;
-            Transaction entity = new Transaction();
-            entity.setTransactionId(tr.getTransactionId());
-            entity.setBookingDate(tr.getBookingDate());
-            entity.setValueDate(tr.getValueDate());
-            entity.setAmount(tr.getTransactionAmount().getAmount());
-            if(tr.getCreditorName()!=null){
-                entity.setCompanyName(tr.getCreditorName());
-            }else if(tr.getDebtorName()!=null){
-                entity.setCompanyName(tr.getDebtorName());
-            }else{
-                entity.setCompanyName("NO TITLE");
+            Transaction last = transactionRepository.findLast().orElse(new Transaction());
+            for (Booked tr : bookedTransactions) {
+                if(tr.getTransactionId().equals(last.getTransactionId())) break;
+                Transaction entity = new Transaction();
+                entity.setTransactionId(tr.getTransactionId());
+                entity.setBookingDate(tr.getBookingDate());
+                entity.setValueDate(tr.getValueDate());
+                entity.setAmount(tr.getTransactionAmount().getAmount());
+                if(tr.getCreditorName()!=null){
+                    entity.setCompanyName(tr.getCreditorName());
+                }else if(tr.getDebtorName()!=null){
+                    entity.setCompanyName(tr.getDebtorName());
+                }else{
+                    entity.setCompanyName("NO TITLE");
+                }
+                if(tr.getDebtorAccount()!=null) {
+                    entity.setIban(tr.getDebtorAccount().getIban());
+                }else{
+                    entity.setIban("NO IBAN");
+                }
+                entity.setDescription(tr.getRemittanceInformationStructured());
+                entity.setAdditionalInformation(tr.getAdditionalInformation());
+                transactionRepository.save(entity);
             }
-            if(tr.getDebtorAccount()!=null) {
-                entity.setIban(tr.getDebtorAccount().getIban());
-            }else{
-                entity.setIban("NO IBAN");
-            }
-            entity.setDescription(tr.getRemittanceInformationStructured());
-            entity.setAdditionalInformation(tr.getAdditionalInformation());
-            transactionRepository.save(entity);
-        }
 
-        return transactions;
+        } catch (HttpClientErrorException e) {
+            e.printStackTrace();
+            if(e.getStatusCode().value()==401){
+                getAccessTokenWithRefresh();
+            }
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        }
     }
 
     private User getUserEntity(){
