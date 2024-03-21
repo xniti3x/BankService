@@ -2,6 +2,7 @@ package com.bankservice.Bank.service;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
@@ -30,6 +31,7 @@ import com.bankservice.Bank.util.BankingLink;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+@SuppressWarnings("null")
 @Service
 public class BankService {
 
@@ -199,11 +201,15 @@ public class BankService {
         try {
             ResponseEntity<String> transactions= restTemplate.exchange(url, HttpMethod.GET, request, String.class);
             
-            ObjectMapper mapper = new ObjectMapper();
+                        ObjectMapper mapper = new ObjectMapper();
             TransactionDto dto = mapper.readValue(transactions.getBody(),TransactionDto.class);
             ArrayList<Booked> bookedTransactions = dto.getTransactions().getBooked();
-        
-            Transaction last = transactionRepository.findLast().orElse(new Transaction());
+            
+            Transaction last = transactionRepository.findFirstByOrderByIdDesc().orElse(new Transaction());
+            if(last.equals(new Transaction())) {
+                Collections.reverse(bookedTransactions);
+            }
+
             for (Booked tr : bookedTransactions) {
                 if(tr.getTransactionId().equals(last.getTransactionId())) break;
                 Transaction entity = new Transaction();
@@ -226,16 +232,16 @@ public class BankService {
                 entity.setDescription(tr.getRemittanceInformationStructured());
                 entity.setAdditionalInformation(tr.getAdditionalInformation());
                 transactionRepository.save(entity);
-            }
+                            }
 
-        } catch (HttpClientErrorException e) {
+                    } catch (HttpClientErrorException e) {
             e.printStackTrace();
             if(e.getStatusCode().value()==401){
                 getAccessTokenWithRefresh();
             }
         } catch (JsonProcessingException e) {
             e.printStackTrace();
-        }
+                }
     }
 
     private User getUserEntity(){
