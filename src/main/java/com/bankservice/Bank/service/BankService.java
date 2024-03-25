@@ -201,53 +201,58 @@ public class BankService {
         try {
             ResponseEntity<String> transactions= restTemplate.exchange(url, HttpMethod.GET, request, String.class);
             
-                        ObjectMapper mapper = new ObjectMapper();
+            ObjectMapper mapper = new ObjectMapper();
             TransactionDto dto = mapper.readValue(transactions.getBody(),TransactionDto.class);
             ArrayList<Booked> bookedTransactions = dto.getTransactions().getBooked();
             
-            Transaction last = transactionRepository.findFirstByOrderByIdDesc().orElse(new Transaction());
+            Transaction last = transactionRepository.findLast().orElse(new Transaction());
             if(last.equals(new Transaction())) {
                 Collections.reverse(bookedTransactions);
             }
-
+            ArrayList<Transaction> pickedList = new ArrayList<>();
             for (Booked tr : bookedTransactions) {
                 if(tr.getTransactionId().equals(last.getTransactionId())) break;
-                Transaction entity = new Transaction();
-                entity.setTransactionId(tr.getTransactionId());
-                entity.setBookingDate(tr.getBookingDate());
-                entity.setValueDate(tr.getValueDate());
-                entity.setAmount(tr.getTransactionAmount().getAmount());
-                if(tr.getCreditorName()!=null){
-                    entity.setCompanyName(tr.getCreditorName());
-                }else if(tr.getDebtorName()!=null){
-                    entity.setCompanyName(tr.getDebtorName());
-                }else{
-                    entity.setCompanyName("NO TITLE");
-                }
-                if(tr.getDebtorAccount()!=null) {
-                    entity.setIban(tr.getDebtorAccount().getIban());
-                }else{
-                    entity.setIban("NO IBAN");
-                }
-                entity.setDescription(tr.getRemittanceInformationStructured());
-                entity.setAdditionalInformation(tr.getAdditionalInformation());
-                transactionRepository.save(entity);
-                            }
-
-                    } catch (HttpClientErrorException e) {
+                Transaction entity = convertToTransaction(tr);
+                pickedList.add(entity);
+            }
+            Collections.reverse(pickedList);
+            transactionRepository.saveAll(pickedList);
+            
+        } catch (HttpClientErrorException e) {
             e.printStackTrace();
             if(e.getStatusCode().value()==401){
                 getAccessTokenWithRefresh();
             }
         } catch (JsonProcessingException e) {
             e.printStackTrace();
-                }
+        }
     }
 
+    private static Transaction convertToTransaction(Booked tr){
+        Transaction entity = new Transaction();
+        entity.setTransactionId(tr.getTransactionId());
+        entity.setBookingDate(tr.getBookingDate());
+        entity.setValueDate(tr.getValueDate());
+        entity.setAmount(tr.getTransactionAmount().getAmount());
+        if(tr.getCreditorName()!=null){
+            entity.setCompanyName(tr.getCreditorName());
+        }else if(tr.getDebtorName()!=null){
+            entity.setCompanyName(tr.getDebtorName());
+        }else{
+            entity.setCompanyName("NO TITLE");
+        }
+        if(tr.getDebtorAccount()!=null) {
+            entity.setIban(tr.getDebtorAccount().getIban());
+        }else{
+            entity.setIban("NO IBAN");
+        }
+        entity.setDescription(tr.getRemittanceInformationStructured());
+        entity.setAdditionalInformation(tr.getAdditionalInformation());
+        return entity;
+    }
     private User getUserEntity(){
         return userRepositiory.findById(1).get();
     }
-
     private String getBaseUrl(){
         return ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();
     }
