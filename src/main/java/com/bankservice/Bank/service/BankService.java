@@ -1,38 +1,29 @@
 package com.bankservice.Bank.service;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.env.Environment;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
-
-import com.bankservice.Bank.entity.Account;
-import com.bankservice.Bank.entity.Agreement;
-import com.bankservice.Bank.entity.Institution;
-import com.bankservice.Bank.entity.Requisition;
-import com.bankservice.Bank.entity.Token;
-import com.bankservice.Bank.entity.Transaction;
-import com.bankservice.Bank.entity.User;
+import com.bankservice.Bank.entity.*;
 import com.bankservice.Bank.repository.SettingRepository;
 import com.bankservice.Bank.repository.TransactionRepository;
 import com.bankservice.Bank.repository.UserRepositiory;
 import com.bankservice.Bank.util.BankingLink;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.log4j.Log4j2;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
+import org.springframework.http.*;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 
 @SuppressWarnings("null")
 @Service
+@Log4j2
 public class BankService {
 
     @Autowired private UserRepositiory userRepositiory;
@@ -56,11 +47,11 @@ public class BankService {
         restTemplate = new RestTemplate();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<String> request =  new HttpEntity<String>(json, headers);
+        HttpEntity<String> request = new HttpEntity<>(json, headers);
 
         Token token = restTemplate.postForObject(url, request, Token.class);
         user.setToken(token);
-        userRepositiory.save(user);
+        userRepositiory.saveAndFlush(user);
         
     
         return "token erfolgreich gespeichert. <a href='"+getBaseUrl()+"/choosebank'>weiter</a>";
@@ -75,18 +66,24 @@ public class BankService {
         String json = mapper.createObjectNode()
                         .put("refresh",oldToken.getRefresh()).toString();
         
-                        restTemplate = new RestTemplate();
+        restTemplate = new RestTemplate();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<String> request =  new HttpEntity<String>(json, headers);
+        HttpEntity<String> request = new HttpEntity<>(json, headers);
+        try {
+            Token newToken = restTemplate.postForObject(url, request, Token.class);
+            assert newToken != null;
+            oldToken.setAccess(newToken.getAccess());
+            oldToken.setAccess_expires(newToken.getAccess_expires());
+            newToken=oldToken;
 
-        Token newToken = restTemplate.postForObject(url, request, Token.class);
-        oldToken.setAccess(newToken.getAccess());
-        oldToken.setAccess_expires(newToken.getAccess_expires());
-        newToken=oldToken;
-
-        user.setToken(newToken);
-        userRepositiory.save(user);
+            user.setToken(newToken);
+            userRepositiory.saveAndFlush(user);
+        }catch (HttpClientErrorException e){
+            if(e.getStatusCode().value()==401){
+                getAccessToken();
+            }
+        }
     }
 
     public String chooseBank(){
@@ -98,10 +95,11 @@ public class BankService {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authorization", "Bearer "+ token.getAccess());
-        HttpEntity<String> request =  new HttpEntity<String>(headers);
+        HttpEntity<String> request = new HttpEntity<>(headers);
         
         Institution[] ins = restTemplate.exchange( url, HttpMethod.GET, request, Institution[].class).getBody();
-        
+
+        assert ins != null;
         for (Institution institution : ins) {
             if(institution.getId().equals(env.getProperty("institutionId"))){
                 user.setInstitution(institution);
@@ -133,9 +131,9 @@ public class BankService {
                         //.put("access_scope", Arrays.asList("transaction").toString())
                         .toString();
         
-        HttpEntity<String> request =  new HttpEntity<String>(body, headers);
+        HttpEntity<String> request = new HttpEntity<>(body, headers);
         Agreement agreement = restTemplate.postForObject(url, request, Agreement.class);
-       
+
         user.setAgreement(agreement);
         return userRepositiory.save(user).toString();
     }
@@ -162,10 +160,11 @@ public class BankService {
                         .toString();
         
         
-        HttpEntity<String> request =  new HttpEntity<String>(body, headers);
+        HttpEntity<String> request = new HttpEntity<>(body, headers);
         Requisition req = restTemplate.postForObject(url, request, Requisition.class);
         user.setRequisition(req);
-        return userRepositiory.save(user).toString();
+        assert req != null;
+        return userRepositiory.save(user) + "<br>visit Link to accept agreement: <a href='"+req.getLink()+"'>link psd2</a>";
     }
 
     public String listAcc(){
@@ -179,7 +178,7 @@ public class BankService {
         headers.set("accept", "application/json");
         headers.set("Authorization", "Bearer "+user.getToken().getAccess());
         
-        HttpEntity<String> request =  new HttpEntity<String>(headers);
+        HttpEntity<String> request = new HttpEntity<>(headers);
         Account acc = restTemplate.exchange(url, HttpMethod.GET, request, Account.class).getBody();
         user.setAccount(acc);
         return userRepositiory.save(user).toString();
@@ -189,15 +188,15 @@ public class BankService {
     public void accessAccountData() {
         User user = getUserEntity();
         String url = settingRepository.findByName(BankingLink.ACCESS_TRANSACTION.toString())+user.getAccount().getAccounts().get(0)+"/transactions/";
-        
+
         restTemplate = new RestTemplate();
-        
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("accept", "application/json");
         headers.set("Authorization", "Bearer "+user.getToken().getAccess());
-        
-        HttpEntity<String> request =  new HttpEntity<String>(headers);
+
+        HttpEntity<String> request = new HttpEntity<>(headers);
         try {
             ResponseEntity<String> transactions= restTemplate.exchange(url, HttpMethod.GET, request, String.class);
             
@@ -208,23 +207,30 @@ public class BankService {
             Transaction last = transactionRepository.findLast().orElse(new Transaction());
             if(last.equals(new Transaction())) {
                 Collections.reverse(bookedTransactions);
+                for (Booked tr : bookedTransactions){
+                    Transaction entity = convertToTransaction(tr);
+                    entity.setUserId(getUserEntity().getId());
+                    transactionRepository.save(entity);
+                }
+            }else{
+                ArrayList<Transaction> pickedList = new ArrayList<>();
+                for (Booked tr : bookedTransactions) {
+                    if(tr.getTransactionId().equals(last.getTransactionId())) break;
+                    Transaction entity = convertToTransaction(tr);
+                    entity.setUserId(getUserEntity().getId());
+                    pickedList.add(entity);
+                }
+                Collections.reverse(pickedList);
+                transactionRepository.saveAll(pickedList);
             }
-            ArrayList<Transaction> pickedList = new ArrayList<>();
-            for (Booked tr : bookedTransactions) {
-                if(tr.getTransactionId().equals(last.getTransactionId())) break;
-                Transaction entity = convertToTransaction(tr);
-                pickedList.add(entity);
-            }
-            Collections.reverse(pickedList);
-            transactionRepository.saveAll(pickedList);
-            
         } catch (HttpClientErrorException e) {
-            e.printStackTrace();
             if(e.getStatusCode().value()==401){
                 getAccessTokenWithRefresh();
+            }else if(e.getStatusCode().value()==400){
+                log.info("vermutlich ist das agreement abgelaufen.");
             }
         } catch (JsonProcessingException e) {
-            e.printStackTrace();
+            log.info("das json format ist ungültig oder hat sich verändert.");
         }
     }
 
@@ -251,7 +257,10 @@ public class BankService {
         return entity;
     }
     private User getUserEntity(){
-        return userRepositiory.findById(1).get();
+
+        String activeUser = settingRepository.findByName("USER_ACTIVE");
+        if(activeUser==null) activeUser="1";
+        return userRepositiory.findById(Integer.valueOf(activeUser)).orElse(new User());
     }
     private String getBaseUrl(){
         return ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();

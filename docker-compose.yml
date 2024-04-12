@@ -8,10 +8,10 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - mariadb
+      - mysqldb
 
-  mariadb:
-    image: mariadb
+  mysqldb:
+    image: mysqldb
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: root
@@ -27,10 +27,10 @@ services:
     image: phpmyadmin/phpmyadmin
     restart: always
     environment:
-      PMA_HOST: mariadb
+      PMA_HOST: mysqldb
       PMA_USER: root
       PMA_PASSWORD: root
     ports:
       - "8081:80"
     depends_on:
-      - mariadb
+      - mysqldb
