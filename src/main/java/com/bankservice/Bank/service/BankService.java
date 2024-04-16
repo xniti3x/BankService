@@ -103,6 +103,8 @@ public class BankService {
         for (Institution institution : ins) {
             if(institution.getId().equals(env.getProperty("institutionId"))){
                 user.setInstitution(institution);
+                userRepositiory.saveAndFlush(user);
+                log.info("institution match gefunden.");
             }
         }
         
@@ -135,7 +137,7 @@ public class BankService {
         Agreement agreement = restTemplate.postForObject(url, request, Agreement.class);
 
         user.setAgreement(agreement);
-        return userRepositiory.save(user).toString();
+        return userRepositiory.save(user) + "<br>build link: <a href='"+getBaseUrl()+"/buildlink'>build</a>";
     }
 
     public String buildLink(){
@@ -170,7 +172,7 @@ public class BankService {
     public String listAcc(){
         
         User user = getUserEntity();
-        String url = settingRepository.findByName(BankingLink.LIST_ACCOUNT.toString()) + user.getRequisition().getId();
+        String url = settingRepository.findByName(BankingLink.LIST_ACCOUNT.toString()) + user.getRequisition().getId()+"/?format=json";
         restTemplate = new RestTemplate();
         
         HttpHeaders headers = new HttpHeaders();
@@ -204,7 +206,7 @@ public class BankService {
             TransactionDto dto = mapper.readValue(transactions.getBody(),TransactionDto.class);
             ArrayList<Booked> bookedTransactions = dto.getTransactions().getBooked();
             
-            Transaction last = transactionRepository.findLast().orElse(new Transaction());
+            Transaction last = transactionRepository.findLast(user.getId()).orElse(new Transaction());
             if(last.equals(new Transaction())) {
                 Collections.reverse(bookedTransactions);
                 for (Booked tr : bookedTransactions){

@@ -9,7 +9,7 @@ import com.bankservice.Bank.entity.Transaction;
 
 public interface TransactionRepository extends JpaRepository<Transaction,Integer> {
 
-    @Query("SELECT t FROM Transaction t ORDER BY t.id DESC LIMIT 1")
-    Optional<Transaction> findLast();
+    @Query("SELECT t FROM Transaction t WHERE t.userId=?1 ORDER BY t.id DESC LIMIT 1")
+    Optional<Transaction> findLast(int userId);
 }
 
