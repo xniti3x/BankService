@@ -185,7 +185,7 @@ public class BankService {
         return userRepositiory.save(user).toString();
     }
 
-    @Scheduled(cron = "${cronjob}")
+    @Scheduled(cron = "${cronjob}", zone = "Europe/Berlin")
     public void accessAccountData() {
         User user = getUserEntity();
         String url = settingRepository.findByName(BankingLink.ACCESS_TRANSACTION.toString())+user.getAccount().getAccounts().get(0)+"/transactions/";
@@ -225,6 +225,22 @@ public class BankService {
             }
         } catch (JsonProcessingException e) {
             e.printStackTrace();
+        }
+
+        selectNextUser(user);
+    }
+
+    private void selectNextUser(User currentUser) {
+        var userList=userRepositiory.findAll();
+        for (int i=0; i<userList.size(); i++) {
+            if(userList.get(i).getId()==currentUser.getId()){
+                int nextIndex=i+1;
+                if(userList.size()<=nextIndex) {
+					settingRepository.setName(""+userList.get(0).getId());
+            	}else{
+					settingRepository.setName(""+userList.get(nextIndex).getId());
+				}
+			}
         }
     }
 
