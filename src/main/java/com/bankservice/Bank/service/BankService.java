@@ -217,6 +217,7 @@ public class BankService {
             }
             Collections.reverse(pickedList);
             transactionRepository.saveAll(pickedList);
+	    selectNextUser(user);
             
         } catch (HttpClientErrorException e) {
             e.printStackTrace();
@@ -226,8 +227,6 @@ public class BankService {
         } catch (JsonProcessingException e) {
             e.printStackTrace();
         }
-
-        selectNextUser(user);
     }
 
     private void selectNextUser(User currentUser) {
