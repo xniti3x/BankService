@@ -1,36 +1,44 @@
-version: '3'
+version: '3.8'
 
 services:
-
-  bankservice:
-    image: bankservice
-    restart: always
-    ports:
-      - "8080:8080"
-    depends_on:
-      - mariadb
-
+  # MariaDB Service
   mariadb:
     image: mariadb
-    restart: always
+    container_name: mariadb
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: bank
+      MYSQL_ROOT_PASSWORD: root  # Set your root password here
+      MYSQL_DATABASE: bank	# Name of your default database
       MYSQL_USER: root
-      MYSQL_PASSWORD: root
+      MYSQL_PASSWORD: root  # Password for your custom user
     ports:
-      - "3306:3306"
+      - "3306:3306"  # Expose MariaDB port
+    restart: always  # This will ensure the container restarts automatically
     volumes:
-      - ./data:/var/lib/mysql
+      - ./data:/var/lib/mysql  # Persist database data
 
+  # phpMyAdmin Service
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
-    restart: always
+    container_name: phpmyadmin
     environment:
-      PMA_HOST: mariadb
-      PMA_USER: root
-      PMA_PASSWORD: root
+      PMA_HOST: mariadb  # Points to the MariaDB service
+      PMA_USER: root  # The MariaDB user
+      PMA_PASSWORD: root  # The user password
     ports:
-      - "8081:80"
-    depends_on:
-      - mariadb
+      - "8081:80"  # Expose phpMyAdmin on port 8080
+    restart: always  # This will ensure the container restarts automatically
+
+  # Spring Boot Application Service
+  springboot-app:
+    build:
+      context: .  # Path to your Spring Boot application folder (must contain Dockerfile)
+    container_name: springboot-app
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mariadb://mariadb:3306/bank  # Database connection URL
+      SPRING_DATASOURCE_USERNAME: root  # Database username
+      SPRING_DATASOURCE_PASSWORD: root # Database password
+    ports:
+      - "8080:8080"  # Expose Spring Boot app on port 8081 (or modify based on your app's port)
+    restart: always  # This will ensure the container restarts automatically
+volumes:
+  mariadb_data:

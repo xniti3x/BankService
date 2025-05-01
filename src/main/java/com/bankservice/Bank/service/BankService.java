@@ -1,9 +1,7 @@
 package com.bankservice.Bank.service;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-
+import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpEntity;
@@ -31,19 +29,20 @@ import com.bankservice.Bank.util.BankingLink;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-@SuppressWarnings("null")
+import lombok.extern.log4j.Log4j2;
+
 @Service
+@Log4j2
 public class BankService {
 
     @Autowired private UserRepositiory userRepositiory;
     @Autowired private SettingRepository settingRepository;
     @Autowired private TransactionRepository transactionRepository;
     @Autowired private Environment env;
-
     
-
     private RestTemplate restTemplate;
-
+    
+    private int counter = 0;
 
     public String getAccessToken(){
         User user = getUserEntity();
@@ -56,17 +55,19 @@ public class BankService {
         restTemplate = new RestTemplate();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        log.info("try to fetch token");
         HttpEntity<String> request =  new HttpEntity<String>(json, headers);
 
         Token token = restTemplate.postForObject(url, request, Token.class);
         user.setToken(token);
+        log.info("saving token.");
         userRepositiory.save(user);
         
     
         return "token erfolgreich gespeichert. <a href='"+getBaseUrl()+"/choosebank'>weiter</a>";
     }
 
-    public void getAccessTokenWithRefresh(){
+    public boolean getAccessTokenWithRefresh(){
         User user = getUserEntity();
         String url = settingRepository.findByName(BankingLink.REFRESH_TOKEN.toString());
         Token oldToken = user.getToken();
@@ -80,13 +81,15 @@ public class BankService {
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<String> request =  new HttpEntity<String>(json, headers);
 
+        log.info("try fetch refreshing token.");
         Token newToken = restTemplate.postForObject(url, request, Token.class);
+        
         oldToken.setAccess(newToken.getAccess());
         oldToken.setAccess_expires(newToken.getAccess_expires());
         newToken=oldToken;
-
         user.setToken(newToken);
-        userRepositiory.save(user);
+        log.info("saving refreshed token.");
+        return userRepositiory.save(user) !=null;
     }
 
     public String chooseBank(){
@@ -100,6 +103,7 @@ public class BankService {
         headers.set("Authorization", "Bearer "+ token.getAccess());
         HttpEntity<String> request =  new HttpEntity<String>(headers);
         
+        log.info("choseBank");
         Institution[] ins = restTemplate.exchange( url, HttpMethod.GET, request, Institution[].class).getBody();
         
         for (Institution institution : ins) {
@@ -132,7 +136,7 @@ public class BankService {
                         .put("access_valid_for_days", settingRepository.findByName("access_valid_for_days"))
                         //.put("access_scope", Arrays.asList("transaction").toString())
                         .toString();
-        
+        log.info("create agreement");
         HttpEntity<String> request =  new HttpEntity<String>(body, headers);
         Agreement agreement = restTemplate.postForObject(url, request, Agreement.class);
        
@@ -161,7 +165,7 @@ public class BankService {
                         .put("user_language", "DE")
                         .toString();
         
-        
+        log.info("build link.");
         HttpEntity<String> request =  new HttpEntity<String>(body, headers);
         Requisition req = restTemplate.postForObject(url, request, Requisition.class);
         user.setRequisition(req);
@@ -182,11 +186,12 @@ public class BankService {
         HttpEntity<String> request =  new HttpEntity<String>(headers);
         Account acc = restTemplate.exchange(url, HttpMethod.GET, request, Account.class).getBody();
         user.setAccount(acc);
+        log.info("list acc");
         return userRepositiory.save(user).toString();
     }
 
     @Scheduled(cron = "${cronjob}", zone = "Europe/Berlin")
-    public void accessAccountData() {
+    public List<Transaction> accessAccountData() {
         User user = getUserEntity();
         String url = settingRepository.findByName(BankingLink.ACCESS_TRANSACTION.toString())+user.getAccount().getAccounts().get(0)+"/transactions/";
         
@@ -199,34 +204,37 @@ public class BankService {
         
         HttpEntity<String> request =  new HttpEntity<String>(headers);
         try {
+            log.info("fetching transactions...");
             ResponseEntity<String> transactions= restTemplate.exchange(url, HttpMethod.GET, request, String.class);
             
             ObjectMapper mapper = new ObjectMapper();
             TransactionDto dto = mapper.readValue(transactions.getBody(),TransactionDto.class);
-            ArrayList<Booked> bookedTransactions = dto.getTransactions().getBooked();
-            
-            Transaction last = transactionRepository.findLast().orElse(new Transaction());
-            if(last.equals(new Transaction())) {
-                Collections.reverse(bookedTransactions);
-            }
-            ArrayList<Transaction> pickedList = new ArrayList<>();
-            for (Booked tr : bookedTransactions) {
-                if(tr.getTransactionId().equals(last.getTransactionId())) break;
-                Transaction entity = convertToTransaction(tr);
-                pickedList.add(entity);
-            }
-            Collections.reverse(pickedList);
-            transactionRepository.saveAll(pickedList);
-	    selectNextUser(user);
-            
+            List<Transaction> bookedTransactions = dto.getTransactions().getBooked().stream().map(t->convertToTransaction(t)).toList();
+            List<Transaction> list = transactionRepository.findAll().stream().distinct().filter(t->!bookedTransactions.contains(t)).toList();
+
+            list.forEach(t->transactionRepository.save(t));
+            counter = 0;
+            return list;
         } catch (HttpClientErrorException e) {
             e.printStackTrace();
+            
             if(e.getStatusCode().value()==401){
-                getAccessTokenWithRefresh();
+                boolean isRefreshed = getAccessTokenWithRefresh();
+                if(isRefreshed && counter <= 1){
+                    log.info("try fetching transactions with refreshed token.");
+                    accessAccountData();
+                    counter ++;
+                }
+            }else{
+                log.info("failed -> statusCode:"+e.getStatusCode());
+                log.info(e.getMessage());
             }
         } catch (JsonProcessingException e) {
             e.printStackTrace();
         }
+         
+        counter = 0;   
+        return null;
     }
 
     private void selectNextUser(User currentUser) {
@@ -266,7 +274,7 @@ public class BankService {
         return entity;
     }
     private User getUserEntity(){
-        return userRepositiory.findById(1).get();
+        return userRepositiory.findAll().get(0);
     }
     private String getBaseUrl(){
         return ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();

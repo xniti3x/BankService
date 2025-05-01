@@ -43,8 +43,8 @@ public class BankingController {
     }
 
     @GetMapping("/accessbankdata")
-    public void accessBankData(){
-        bankService.accessAccountData();
+    public String accessBankData(){
+        return bankService.accessAccountData().toString();
     }
 
     
