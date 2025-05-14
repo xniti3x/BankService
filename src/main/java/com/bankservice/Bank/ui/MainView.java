@@ -1,23 +1,23 @@
 package com.bankservice.Bank.ui;
 
-import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
-
 import com.bankservice.Bank.entity.Document;
 import com.bankservice.Bank.entity.Transaction;
 import com.bankservice.Bank.repository.DocumentRepository;
 import com.bankservice.Bank.repository.TransactionRepository;
-import com.bankservice.Bank.service.DocumentService;
 import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.combobox.ComboBox;
-import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.textfield.TextArea;
+import com.vaadin.flow.data.renderer.ComponentRenderer;
 import com.vaadin.flow.router.Route;
 
+import lombok.extern.slf4j.Slf4j;
+
 @Route("") // root path
+@Slf4j
 public class MainView extends VerticalLayout { 
     
     private final TransactionRepository transactionService;
@@ -83,8 +83,16 @@ public class MainView extends VerticalLayout {
 
     private void configureDocumentGrid() {
         documentGrid.setSelectionMode(Grid.SelectionMode.MULTI);
-        documentGrid.addColumn(Document::getId).setHeader("ID");
-        documentGrid.addColumn(Document::getTitle).setHeader("Title");
+        documentGrid.setWidthFull();
+        documentGrid.setAllRowsVisible(true);
+        //documentGrid.addColumn(Document::getContent).setHeader("content");
+        documentGrid.addColumn(new ComponentRenderer<>(document -> {
+        TextArea textArea = new TextArea();
+        textArea.setWidthFull();
+        textArea.setLabel("Description");
+        textArea.setValue(document.getContent());
+        return new Div(textArea);
+})).setHeader("Document Info").setAutoWidth(true);
     }
 
     private void refreshGrids() {

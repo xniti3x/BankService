@@ -34,3 +34,7 @@ build/
 ### Mysql ###
 data/**
 /src/main/resources/data.sql
+
+### Log ###
+./logs/*
+*.log

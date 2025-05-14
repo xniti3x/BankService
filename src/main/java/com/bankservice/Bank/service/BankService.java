@@ -1,6 +1,12 @@
 package com.bankservice.Bank.service;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
@@ -29,10 +35,10 @@ import com.bankservice.Bank.util.BankingLink;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
-@Log4j2
+@Slf4j
 public class BankService {
 
     @Autowired private UserRepositiory userRepositiory;
@@ -83,10 +89,7 @@ public class BankService {
 
         log.info("try fetch refreshing token.");
         Token newToken = restTemplate.postForObject(url, request, Token.class);
-        
-        oldToken.setAccess(newToken.getAccess());
-        oldToken.setAccess_expires(newToken.getAccess_expires());
-        newToken=oldToken;
+        newToken.setId(oldToken.getId());
         user.setToken(newToken);
         log.info("saving refreshed token.");
         return userRepositiory.save(user) !=null;
@@ -203,38 +206,43 @@ public class BankService {
         headers.set("Authorization", "Bearer "+user.getToken().getAccess());
         
         HttpEntity<String> request =  new HttpEntity<String>(headers);
+        List<Transaction> list = Collections.emptyList();
         try {
             log.info("fetching transactions...");
             ResponseEntity<String> transactions= restTemplate.exchange(url, HttpMethod.GET, request, String.class);
-            
+            writeStringToTimestampedFile(transactions.getBody());
             ObjectMapper mapper = new ObjectMapper();
             TransactionDto dto = mapper.readValue(transactions.getBody(),TransactionDto.class);
             List<Transaction> bookedTransactions = dto.getTransactions().getBooked().stream().map(t->convertToTransaction(t)).toList();
-            List<Transaction> list = transactionRepository.findAll().stream().distinct().filter(t->!bookedTransactions.contains(t)).toList();
+            list = transactionRepository.findAll().stream().distinct().filter(t->!bookedTransactions.contains(t)).toList();
 
             list.forEach(t->transactionRepository.save(t));
             counter = 0;
             return list;
         } catch (HttpClientErrorException e) {
             e.printStackTrace();
-            
+            log.debug(e.getMessage());
             if(e.getStatusCode().value()==401){
                 boolean isRefreshed = getAccessTokenWithRefresh();
-                if(isRefreshed && counter <= 1){
-                    log.info("try fetching transactions with refreshed token.");
-                    accessAccountData();
-                    counter ++;
+                if(isRefreshed){
+                    if(counter <= 1){
+                        log.info("try fetching transactions with refreshed token.");
+                        counter ++;
+                        accessAccountData();
+                    }
+                }else{
+                    log.info("refresh token failed.");
                 }
             }else{
                 log.info("failed -> statusCode:"+e.getStatusCode());
-                log.info(e.getMessage());
+                log.debug(e.getMessage());
             }
         } catch (JsonProcessingException e) {
             e.printStackTrace();
         }
          
         counter = 0;   
-        return null;
+        return list;
     }
 
     private void selectNextUser(User currentUser) {
@@ -279,7 +287,19 @@ public class BankService {
     private String getBaseUrl(){
         return ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();
     }
-    
 
+    private void writeStringToTimestampedFile(String content) {
+        // Generate a timestamp-based filename
+        String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS").format(new Date());
+        String filename = "response_" + timestamp + ".json";
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(filename))) {
+            writer.write(content);
+            log.info("Written to file: " + filename);
+        } catch (IOException e) {
+            log.debug("Error writing to file: " + e.getMessage());
+            log.info("Error writing to file" + filename);
+        }
+    }
 
 }
