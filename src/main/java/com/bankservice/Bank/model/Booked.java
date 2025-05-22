@@ -1,17 +1,15 @@
-package com.bankservice.Bank.service;
+package com.bankservice.Bank.model;
 
 import java.util.ArrayList;
-
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
- @AllArgsConstructor
- @NoArgsConstructor
- @Data
- class Booked{
+@AllArgsConstructor
+@NoArgsConstructor
+@Data
+public class Booked {
     public String transactionId;
     public String entryReference;
     public String bookingDate;
@@ -34,37 +32,3 @@ import lombok.NoArgsConstructor;
     public String ultimateCreditor;
     public String mandateId;
 }
- @AllArgsConstructor
- @NoArgsConstructor
- @Data
- class CreditorAccount{
-    public String iban;
- }
- @AllArgsConstructor
- @NoArgsConstructor
- @Data
- class DebtorAccount{
-    public String iban;
- }
-
- @AllArgsConstructor
- @NoArgsConstructor
- @Data
- public class TransactionDto{
-    public Transactions transactions;
- }
- @AllArgsConstructor
- @NoArgsConstructor
- @Data
- class TransactionAmount{
-    public String amount;
-    public String currency;
- }
- @AllArgsConstructor
- @NoArgsConstructor
- @Data
-@JsonIgnoreProperties(ignoreUnknown = true)
- class Transactions{
-    public ArrayList<Booked> booked;
-    public ArrayList<Object> pending;
- }

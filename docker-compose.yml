@@ -1,5 +1,4 @@
 services:
-  # MariaDB Service
   mariadb:
     image: mariadb
     container_name: mariadb
@@ -16,7 +15,6 @@ services:
     networks:
       - appnet
 
-  # phpMyAdmin Service
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
     container_name: phpmyadmin
@@ -30,7 +28,6 @@ services:
     networks:
       - appnet
 
-  # Spring Boot Application Service
   springboot-app:
     build:
       context: .
@@ -39,14 +36,18 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mariadb://mariadb:3306/bank
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root
+      #SPRING_PROFILES_ACTIVE: dev
     ports:
       - "8080:8080"
     restart: always
     networks:
       - appnet
-
+    volumes:
+      - .:/app
+      - ~/.m2:/root/.m2
 volumes:
   mariadb_data:
 
 networks:
   appnet:
+    driver: bridge

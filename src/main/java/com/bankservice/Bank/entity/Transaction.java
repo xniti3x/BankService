@@ -1,6 +1,7 @@
 package com.bankservice.Bank.entity;
 
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 
 import jakarta.persistence.CascadeType;
@@ -15,6 +16,7 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 @Entity
@@ -40,6 +42,18 @@ public class Transaction {
     private String description;
     private String additionalInformation;
     
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Transaction)) return false;
+        Transaction that = (Transaction) o;
+        return transactionId.equals(that.transactionId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(transactionId);
+    }
 }
 
 

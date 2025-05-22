@@ -1,17 +1,9 @@
 package com.bankservice.Bank.ui;
 
 import java.io.FileNotFoundException;
-import java.util.Set;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.util.ResourceUtils;
-
-import com.bankservice.Bank.entity.Document;
 import com.bankservice.Bank.entity.Transaction;
 import com.bankservice.Bank.repository.TransactionRepository;
 import com.vaadin.flow.component.Text;
-import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.IFrame;
