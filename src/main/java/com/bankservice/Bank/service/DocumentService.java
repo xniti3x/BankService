@@ -6,9 +6,9 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import com.bankservice.Bank.entity.Document;
 import com.bankservice.Bank.entity.Transaction;
-import com.bankservice.Bank.repository.DocumentRepository;
+import com.bankservice.Bank.model.DocumentDTO;
+import com.bankservice.Bank.repository.SecondaryDao;
 import com.bankservice.Bank.repository.TransactionRepository;
 
 import lombok.extern.slf4j.Slf4j;
@@ -17,39 +17,38 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DocumentService {
 
-    @Autowired
-    TransactionRepository transactionRepository;
-    @Autowired
-    DocumentRepository documentRepository;
+    @Autowired private SecondaryDao documentDao;
+    @Autowired private TransactionRepository transactionRepository;
 
     public void findAndAutoMatch() {
         // fetch all transaction with no document
         List<Transaction> allTransactions = transactionRepository.findAll();
 
         // fetch all documents with no transaction
-        List<Document> allDocuments = documentRepository.findAll();
+        List<DocumentDTO> allDocuments = documentDao.findAll();
 
         // get transaction [company name, price amount, invocieNr, date is after]
         for (Transaction t : allTransactions) {
 
-            for (Document d : allDocuments) {
+            for (DocumentDTO d : allDocuments) {
                 double score = 0;
-                String content = getDocumentContent(0);// d.getDocumentId());
+                String content = d.getContent();
                 if (content.contains(t.getAmount())) {
-                    score += 0.5;
+                    score += 0.3;
                     log.info("amount found score" + score);
                 }
-                ;
 
-                if (content.contains(fetchWithRegex(t.getDescription()))) {
-                    score += 0.5;
+                if(t.getDescription().contains(d.getValueText())){
+                    score += 0.3;
                     log.info("amount found score" + score);
                 }
-                ;
-
-                if (score >= 0.8) {
-                    log.info("total score: " + score);
+                
+                if(t.getAmount().contains(d.getValueText())){
+                    score += 0.3;
+                    log.info("amount found score" + score);
                 }
+                System.out.println("score for document "+d.getTitle()+": "+score);
+                
             }
         }
         // get document content
@@ -79,4 +78,11 @@ public class DocumentService {
         return doc.get(documentId);
     }
 
+    public List<DocumentDTO> findAll(){
+        return documentDao.findAll();
+    }
+
+    public int save(DocumentDTO doc) {
+        return documentDao.save(doc);
+    }
 }

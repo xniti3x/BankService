@@ -1,17 +1,13 @@
 package com.bankservice.Bank.ui;
 
-import java.util.Set;
-import com.bankservice.Bank.entity.Document;
 import com.bankservice.Bank.entity.Transaction;
-import com.bankservice.Bank.repository.DocumentRepository;
+import com.bankservice.Bank.model.DocumentDTO;
 import com.bankservice.Bank.repository.TransactionRepository;
-import com.vaadin.flow.component.button.Button;
+import com.bankservice.Bank.service.DocumentService;
+import com.vaadin.flow.component.Html;
 import com.vaadin.flow.component.grid.Grid;
-import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.component.textfield.TextArea;
-import com.vaadin.flow.data.renderer.ComponentRenderer;
 import com.vaadin.flow.router.Route;
 
 import lombok.extern.slf4j.Slf4j;
@@ -21,19 +17,18 @@ import lombok.extern.slf4j.Slf4j;
 public class MainView extends VerticalLayout { 
     
     private final TransactionRepository transactionService;
-    private final DocumentRepository documentService;
+    private final DocumentService documentService;
 
     private final Grid<Transaction> transactionGrid = new Grid<>(Transaction.class, false);
-    private final Grid<Document> documentGrid = new Grid<>(Document.class, false);
+   
     private final VerticalLayout btnContent = new VerticalLayout();
 
-    public MainView(TransactionRepository transactionService, DocumentRepository documentService) {
+    public MainView(TransactionRepository transactionService, DocumentService documentService) {
         this.transactionService = transactionService;
         this.documentService = documentService;
 
         setupLayout();
         configureTransactionGrid();
-        configureDocumentGrid();
 
         refreshGrids();
     }
@@ -49,10 +44,13 @@ public class MainView extends VerticalLayout {
 
         //transactionGrid.setWidth("50%");
         //documentGrid.setWidth("50%");
-
+        DocumentDTO documentDTO = documentService.findAll().get(0);
+        String pdfURL = System.getProperty("user.dir")+"/../paperless-ngx/media/documents/archive/"+documentDTO.getFilename();
+        Html iframe = new Html("<iframe src='" + pdfURL + "' width='100%' height='100%'></iframe>");
+        
         left.add(transactionGrid);
         right.add(btnContent);
-        right.add(documentGrid);
+        right.add(iframe);
         layout.add(left, right);
         add(layout);
         setSizeFull();
@@ -63,40 +61,21 @@ public class MainView extends VerticalLayout {
         transactionGrid.addColumn(Transaction::getDescription).setHeader("Description");
         transactionGrid.addColumn(Transaction::getAmount).setHeader("Amount");
         
-        transactionGrid.asSingleSelect().addValueChangeListener(event -> {
-            Transaction selectedTransaction = event.getValue();
-            if (selectedTransaction != null) {
-                Button assignButton = new Button("Assign Documents", click -> {
-                    Set<Document> selectedDocs = documentGrid.getSelectedItems();
+
+
+        /*Button assignButton = new Button("Assign Documents", click -> {
+                    Set<DocumentDTO> selectedDocs = documentGrid.getSelectedItems();
                     selectedDocs.forEach(doc -> {
-                        doc.setTransaction(selectedTransaction);
+                        doc.setTransactionId(selectedTransaction.getTransactionId());
                         documentService.save(doc);
                     });
                     refreshGrids();
                 });
-                assignButton.setEnabled(!documentGrid.getSelectedItems().isEmpty());
-                btnContent.removeAll();
-                btnContent.add(assignButton);
-            }
-        });
+                */
     }
 
-    private void configureDocumentGrid() {
-        documentGrid.setSelectionMode(Grid.SelectionMode.MULTI);
-        documentGrid.setWidthFull();
-        documentGrid.setAllRowsVisible(true);
-        //documentGrid.addColumn(Document::getContent).setHeader("content");
-        documentGrid.addColumn(new ComponentRenderer<>(document -> {
-        TextArea textArea = new TextArea();
-        textArea.setWidthFull();
-        textArea.setLabel("Description");
-        textArea.setValue(document.getContent());
-        return new Div(textArea);
-})).setHeader("Document Info").setAutoWidth(true);
-    }
 
     private void refreshGrids() {
         transactionGrid.setItems(transactionService.findTransactionsNotUsedInDocuments());
-        documentGrid.setItems(documentService.findByTransactionIsNull());
     }
 }

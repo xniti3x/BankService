@@ -51,8 +51,10 @@ public class FileView extends VerticalLayout {
                 });
                 return btn;
             })).setHeader("RUN");
-
-            var files = findJsonFilesInRoot(System.getProperty("user.dir")).stream().map(f->f.toFile()).toList();
+             String userDir = System.getProperty("user.dir");
+            Path parentPath = Paths.get(userDir).getParent();
+            String pdfURL = parentPath+"/paperless-ngx/media/documents/archive/";
+            var files = findJsonFilesInRoot(pdfURL).stream().map(f->f.toFile()).toList();
             fileGrid.setItems(files);
             add(fileGrid);
     }

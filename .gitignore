@@ -38,3 +38,6 @@ data/**
 ### Log ###
 ./logs/*
 *.log
+
+### Log ###
+/media/*
